@@ -13,6 +13,7 @@ class FudanPedDataset(Dataset):
 
     def __getitem__(self, index):
         img = Image.open(self.img_list[index]).convert("RGB")
+        w,h=img.size
         mask = Image.open(self.label_list[index])
         mask = np.array(mask)
         obj_ids = np.unique(mask)
@@ -29,10 +30,10 @@ class FudanPedDataset(Dataset):
             xmax = np.max(pos[1])
             ymin = np.min(pos[0])
             ymax = np.max(pos[0])
-            boxes.append([xmin, ymin, xmax, ymax])
-        boxes = torch.as_tensor(boxes, dtype=torch.float32)
+            boxes.append([xmin/float(w), ymin/float(h), xmax/float(w), ymax/float(h)])
+        #boxes = torch.as_tensor(boxes, dtype=torch.float32)
+        img = img.resize((608,608))
         img= self.trans(img)
-        print(img.size)
         return (img,boxes)
 
     def __len__(self):
