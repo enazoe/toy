@@ -3,3 +3,10 @@
 .DS_Store
 *.pth
 data/
+*.pyc
+*.dll
+.vs
+.idea
+__pycache__
+*.jpg
+*.png
