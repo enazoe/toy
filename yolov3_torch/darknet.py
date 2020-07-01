@@ -7,13 +7,51 @@ class EmptyLayer(nn.Module):
     def __init__(self):
         super(EmptyLayer, self).__init__()
   
-
+class DetectionLayer(nn.Module):
+    def __init__(self,anchors):
+        super(DetectionLayer,self).__init__()
+        self.anchors = anchors
 
 class Darknet(nn.Module):
     def __init__(self,cfg_file):
         super(Darknet,self).__init__()
         self.blocks = self.parse_cfg(cfg_file)
-        self.create_moudles(self.blocks)
+        self.net_info,self.module_list = self.create_moudles(self.blocks)
+
+    def forward(self,x,device):
+        modules = self.blocks[1:]
+        output_cahce = {}
+        for i ,module in enumerate(modules):
+            type = module["type"]
+
+            if "convolution" == type:
+                x = self.module_list[i](x)
+            elif "shortcut" == type:
+                pointer = module["from"]
+                x = output_cahce[i-1] + output_cahce[i+pointer]
+            elif "route" == module["route"]:
+                layers = module["layers"]
+                layers = [int(x) for x in layers]
+                if layers[0] > 0:
+                    layers[0] = layers[0] - i
+                if len(layers) == 1:
+                    x = output_cahce[i + layers[0]]
+                else:
+                    if layers[1] > 0 :
+                        layers[1] = layers[1] - i
+                    map1 = output_cahce[i + layers[0]]
+                    map2 = output_cahce[i + layers[1]]
+                    x = torch.cat((map1,map2),1)
+            elif "yolo" == module["yolo"]:
+                anchors = self.module_list[i][0].anchors
+                input_dim = int (self.net_info["height"])
+                num_classes = int (module["classes"])
+
+            output_cahce[i] = x
+            
+    def parse_prediction():
+        return
+
 
     #使用sequential模块创建网络的子模块，like con_bn_leakly ....
     def create_moudles(self,blocks_):
@@ -83,10 +121,22 @@ class Darknet(nn.Module):
                 else:
                     filters= output_filters[index + start]
                 print(module)
+            elif block["type"] == "yolo":
+                mask = block["mask"].split(",")
+                mask = [int(i) for i in mask]
+
+                anchors = block["anchors"].split(",")
+                anchors = [int(i) for i in anchors]
+                anchors = [(anchors[i],anchors[i+1]) for i in range(0,len(anchors),2)]
+                anchors = [anchors[i] for i in mask]
+                yolo = DetectionLayer(anchors)
+                module.add_module("yolo_{0}".format(index),yolo)
+                print(module)
             pre_filters = filters
             module_list.append(module)
             output_filters.append(filters)
 
+        return (net_info,module_list)
 
 
     def parse_cfg(self,cfg_file):

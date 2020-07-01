@@ -10,7 +10,6 @@ def collate_fn(batch):
 
 if __name__ == "__main__":
 
-    Darknet("./cfg/yolov3.cfg")
     #trans = transforms.Compose([transforms.ToTensor()])
     #dataset = FudanPedDataset("./data/PennFudanPed",trans)
 
@@ -19,5 +18,6 @@ if __name__ == "__main__":
    
     #img,boxex = next(iter(trainloader))
 
+    Darknet("./cfg/yolov3.cfg")
 
    
