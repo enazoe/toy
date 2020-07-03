@@ -21,6 +21,7 @@ class Darknet(nn.Module):
     def forward(self,x,device):
         modules = self.blocks[1:]
         output_cahce = {}
+        write = 0
         for i ,module in enumerate(modules):
             type = module["type"]
 
@@ -46,11 +47,55 @@ class Darknet(nn.Module):
                 anchors = self.module_list[i][0].anchors
                 input_dim = int (self.net_info["height"])
                 num_classes = int (module["classes"])
+                x = self.parse_prediction(x,num_classes,anchors,input_dim,device)
+
+                if not write:
+                    write = 1
+                    detection = x
+                else:
+                    detection = torch.cat((detection,x),1)
 
             output_cahce[i] = x
+        return detection
             
-    def parse_prediction():
-        return
+    def parse_prediction(prediction,classes,anchors,input_dimm,CUDA):
+        grid_size = prediction.size(2)
+        batch_size = prediction.size(0)
+        anchor_size = len(anchors)
+
+        prediction = prediction.view(batch_size,anchor_size*(5+classes),grid_size*grid_size)
+        prediction = prediction.transpose(1,2).contiguous()
+        prediction = prediction.view(batch_size,anchor_size*grid_size*grid_size,5+classes)
+
+        prediction = torch.sigmoid(prediction[:,:,:2])
+        #add cx,cy to x,y
+        grid = np.arange(grid_size)
+        a,b = np.meshgrid(grid,grid)
+        x_offset = torch.FloatTensor(a).view(-1,1)
+        y_offset = torch.FloatTensor(b).view(-1,1)
+        if CUDA:
+            x_offset = x_offset.cuda()
+            y_offset = y_offset.cuda()
+        x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0)
+        prediction[:,:,:2] += x_y_offse
+
+        # w,h
+        stride = input_dim // grid_size
+        anchors = [(a[0]/stride,a[1]/stride) for a in anchors]
+        anchors = torch.FloatTensor(anchors)
+        if CUDA:
+            anchors = anchors.cuda()
+        anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)
+        prediction[:,:,2:4] =torch.exp( prediction[:,:,2:4])
+        prediction[:,:,2:4] = prediction[:,:,2:4]*anchors
+        #confidence
+        prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
+
+        #classes
+        prediction[:,:,5:5+classes] = torch.sigmoid((prediction[:,:,5:5+classes]))
+
+        prediction[:,:,0:5] *= stride
+        return prediction
 
 
     #使用sequential模块创建网络的子模块，like con_bn_leakly ....
