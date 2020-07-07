@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 
 class EmptyLayer(nn.Module):
     def __init__(self):
@@ -25,12 +25,12 @@ class Darknet(nn.Module):
         for i ,module in enumerate(modules):
             type = module["type"]
 
-            if "convolution" == type:
+            if "convolutional" == type or type == "upsample":
                 x = self.module_list[i](x)
             elif "shortcut" == type:
-                pointer = module["from"]
+                pointer =int(module["from"])
                 x = output_cahce[i-1] + output_cahce[i+pointer]
-            elif "route" == module["route"]:
+            elif "route" == type:
                 layers = module["layers"]
                 layers = [int(x) for x in layers]
                 if layers[0] > 0:
@@ -43,7 +43,7 @@ class Darknet(nn.Module):
                     map1 = output_cahce[i + layers[0]]
                     map2 = output_cahce[i + layers[1]]
                     x = torch.cat((map1,map2),1)
-            elif "yolo" == module["yolo"]:
+            elif "yolo" == type:
                 anchors = self.module_list[i][0].anchors
                 input_dim = int (self.net_info["height"])
                 num_classes = int (module["classes"])
@@ -54,11 +54,10 @@ class Darknet(nn.Module):
                     detection = x
                 else:
                     detection = torch.cat((detection,x),1)
-
             output_cahce[i] = x
         return detection
             
-    def parse_prediction(prediction,classes,anchors,input_dimm,CUDA):
+    def parse_prediction(self,prediction,classes,anchors,input_dim,CUDA):
         grid_size = prediction.size(2)
         batch_size = prediction.size(0)
         anchor_size = len(anchors)
@@ -67,7 +66,10 @@ class Darknet(nn.Module):
         prediction = prediction.transpose(1,2).contiguous()
         prediction = prediction.view(batch_size,anchor_size*grid_size*grid_size,5+classes)
 
-        prediction = torch.sigmoid(prediction[:,:,:2])
+        prediction[:,:,0] = torch.sigmoid(prediction[:,:,0])
+        prediction[:,:,1] = torch.sigmoid(prediction[:,:,1])
+        #confidence
+        prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
         #add cx,cy to x,y
         grid = np.arange(grid_size)
         a,b = np.meshgrid(grid,grid)
@@ -76,8 +78,8 @@ class Darknet(nn.Module):
         if CUDA:
             x_offset = x_offset.cuda()
             y_offset = y_offset.cuda()
-        x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0)
-        prediction[:,:,:2] += x_y_offse
+        x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,anchor_size).view(-1,2).unsqueeze(0)
+        prediction[:,:,:2] += x_y_offset
 
         # w,h
         stride = input_dim // grid_size
@@ -86,15 +88,13 @@ class Darknet(nn.Module):
         if CUDA:
             anchors = anchors.cuda()
         anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)
-        prediction[:,:,2:4] =torch.exp( prediction[:,:,2:4])
-        prediction[:,:,2:4] = prediction[:,:,2:4]*anchors
-        #confidence
-        prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
+        prediction[:,:,2:4] =torch.exp( prediction[:,:,2:4]) *anchors
+        
 
         #classes
         prediction[:,:,5:5+classes] = torch.sigmoid((prediction[:,:,5:5+classes]))
 
-        prediction[:,:,0:5] *= stride
+        prediction[:,:,0:4] *= stride
         return prediction
 
 
@@ -123,7 +123,7 @@ class Darknet(nn.Module):
                 except:
                     normalization = 0
                     bias = True
-                conv = nn.Conv2d(pre_filters,filters,size,stride,pad, bias)
+                conv = nn.Conv2d(pre_filters,filters,size,stride,pad, bias = bias)
                 module.add_module("conv_{0}".format(index),conv)
 
                 #add normlization
@@ -205,3 +205,89 @@ class Darknet(nn.Module):
     
         blocks.append(block)
         return blocks
+
+    def load_weights(self, weightfile):
+        #Open the weights file
+        fp = open(weightfile, "rb")
+    
+        #The first 5 values are header information 
+        # 1. Major version number
+        # 2. Minor Version Number
+        # 3. Subversion number 
+        # 4,5. Images seen by the network (during training)
+        header = np.fromfile(fp, dtype = np.int32, count = 5)
+        self.header = torch.from_numpy(header)
+        self.seen = self.header[3]   
+        
+        weights = np.fromfile(fp, dtype = np.float32)
+        ptr = 0
+        for i in range(len(self.module_list)):
+            module_type = self.blocks[i + 1]["type"]
+    
+            #If module_type is convolutional load weights
+            #Otherwise ignore.
+            
+            if module_type == "convolutional":
+                model = self.module_list[i]
+                try:
+                    batch_normalize = int(self.blocks[i+1]["batch_normalize"])
+                except:
+                    batch_normalize = 0
+            
+                conv = model[0]
+                
+                
+                if (batch_normalize):
+                    bn = model[1]
+        
+                    #Get the number of weights of Batch Norm Layer
+                    num_bn_biases = bn.bias.numel()
+        
+                    #Load the weights
+                    bn_biases = torch.from_numpy(weights[ptr:ptr + num_bn_biases])
+                    ptr += num_bn_biases
+        
+                    bn_weights = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                    ptr  += num_bn_biases
+        
+                    bn_running_mean = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                    ptr  += num_bn_biases
+        
+                    bn_running_var = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                    ptr  += num_bn_biases
+        
+                    #Cast the loaded weights into dims of model weights. 
+                    bn_biases = bn_biases.view_as(bn.bias.data)
+                    bn_weights = bn_weights.view_as(bn.weight.data)
+                    bn_running_mean = bn_running_mean.view_as(bn.running_mean)
+                    bn_running_var = bn_running_var.view_as(bn.running_var)
+        
+                    #Copy the data to model
+                    bn.bias.data.copy_(bn_biases)
+                    bn.weight.data.copy_(bn_weights)
+                    bn.running_mean.copy_(bn_running_mean)
+                    bn.running_var.copy_(bn_running_var)
+                
+                else:
+                    #Number of biases
+                    num_biases = conv.bias.numel()
+                
+                    #Load the weights
+                    conv_biases = torch.from_numpy(weights[ptr: ptr + num_biases])
+                    ptr = ptr + num_biases
+                
+                    #reshape the loaded weights according to the dims of the model weights
+                    conv_biases = conv_biases.view_as(conv.bias.data)
+                
+                    #Finally copy the data
+                    conv.bias.data.copy_(conv_biases)
+                    
+                #Let us load the weights for the Convolutional layers
+                num_weights = conv.weight.numel()
+                
+                #Do the same as above for weights
+                conv_weights = torch.from_numpy(weights[ptr:ptr+num_weights])
+                ptr = ptr + num_weights
+                
+                conv_weights = conv_weights.view_as(conv.weight.data)
+                conv.weight.data.copy_(conv_weights)
