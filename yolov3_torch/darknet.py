@@ -18,10 +18,11 @@ class Darknet(nn.Module):
         self.blocks = self.parse_cfg(cfg_file)
         self.net_info,self.module_list = self.create_moudles(self.blocks)
 
-    def forward(self,x,device):
+    def forward(self,x,target = None,device="cuda"):
         modules = self.blocks[1:]
         output_cahce = {}
         write = 0
+        losses = 0
         for i ,module in enumerate(modules):
             type = module["type"]
 
@@ -47,57 +48,120 @@ class Darknet(nn.Module):
                 anchors = self.module_list[i][0].anchors
                 input_dim = int (self.net_info["height"])
                 num_classes = int (module["classes"])
-                x = self.parse_prediction(x,num_classes,anchors,input_dim,device)
+                x,loss = self.parse_prediction(x,num_classes,anchors,input_dim,device,target)
 
                 if not write:
                     write = 1
                     detection = x
                 else:
                     detection = torch.cat((detection,x),1)
+                losses += loss
             output_cahce[i] = x
-        return detection
+        return detection,losses
             
-    def parse_prediction(self,prediction,classes,anchors,input_dim,CUDA):
-        grid_size = prediction.size(2)
-        batch_size = prediction.size(0)
-        anchor_size = len(anchors)
+    def parse_prediction(self,prediction,classes,anchors,input_dim,device,targets=None):
+        
+        if targets is not None:
+            loss = self.comput_loss(prediction,targets,anchors,device)
+        else:
+            grid_size = prediction.size(2)
+            batch_size = prediction.size(0)
+            anchor_size = len(anchors)
 
-        prediction = prediction.view(batch_size,anchor_size*(5+classes),grid_size*grid_size)
-        prediction = prediction.transpose(1,2).contiguous()
-        prediction = prediction.view(batch_size,anchor_size*grid_size*grid_size,5+classes)
+            prediction = prediction.view(batch_size,anchor_size*(5+classes),grid_size*grid_size)
+            prediction = prediction.transpose(1,2).contiguous()
+            prediction = prediction.view(batch_size,anchor_size*grid_size*grid_size,5+classes)
 
-        prediction[:,:,0] = torch.sigmoid(prediction[:,:,0])
-        prediction[:,:,1] = torch.sigmoid(prediction[:,:,1])
-        #confidence
-        prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
-        #add cx,cy to x,y
-        grid = np.arange(grid_size)
-        a,b = np.meshgrid(grid,grid)
-        x_offset = torch.FloatTensor(a).view(-1,1)
-        y_offset = torch.FloatTensor(b).view(-1,1)
-        if CUDA:
-            x_offset = x_offset.cuda()
-            y_offset = y_offset.cuda()
-        x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,anchor_size).view(-1,2).unsqueeze(0)
-        prediction[:,:,:2] += x_y_offset
+            prediction[:,:,0] = torch.sigmoid(prediction[:,:,0])
+            prediction[:,:,1] = torch.sigmoid(prediction[:,:,1])
+            #confidence
+            prediction[:,:,4] = torch.sigmoid(prediction[:,:,4])
+            #add cx,cy to x,y
+            grid = np.arange(grid_size)
+            a,b = np.meshgrid(grid,grid)
+            x_offset = torch.FloatTensor(a).view(-1,1)
+            y_offset = torch.FloatTensor(b).view(-1,1)
+            if "cuda" == device:
+                x_offset = x_offset.cuda()
+                y_offset = y_offset.cuda()
+            x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,anchor_size).view(-1,2).unsqueeze(0)
+            prediction[:,:,:2] += x_y_offset
 
-        # w,h
-        stride = input_dim // grid_size
-        anchors = [(a[0]/stride,a[1]/stride) for a in anchors]
-        anchors = torch.FloatTensor(anchors)
-        if CUDA:
-            anchors = anchors.cuda()
-        anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)
-        prediction[:,:,2:4] =torch.exp( prediction[:,:,2:4]) *anchors
+            # w,h
+            stride = input_dim // grid_size
+            anchors = [(a[0]/stride,a[1]/stride) for a in anchors]
+            anchors = torch.FloatTensor(anchors)
+            if "cuda" == device:
+                anchors = anchors.cuda()
+            anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0)
+            prediction[:,:,2:4] =torch.exp( prediction[:,:,2:4]) *anchors
         
 
-        #classes
-        prediction[:,:,5:5+classes] = torch.sigmoid((prediction[:,:,5:5+classes]))
+            #classes
+            prediction[:,:,5:5+classes] = torch.sigmoid((prediction[:,:,5:5+classes]))
 
-        prediction[:,:,0:4] *= stride
-        return prediction
+            prediction[:,:,0:4] *= stride
 
 
+        return prediction,loss
+
+    def comput_loss(self,prediction,targets,anchors,device):
+        loss = 0
+        batch_size = prediction.size(0)
+        channels = prediction.size(1)
+        classes = int(prediction.size(1)/3-5)
+        grid_size = prediction.size(2)
+        anchor_size = len(anchors)
+        #format x
+        prediction = (prediction.view(batch_size,channels,grid_size*grid_size)
+            .permute(0,2,1)
+            .contiguous()
+            .view(batch_size,grid_size*grid_size*anchor_size,5+classes))
+        #format anchor
+        anchors = [[anchor[0]/grid_size,anchor[1]/grid_size]for anchor in anchors]
+        anchors = torch.FloatTensor(anchors)
+        anchors_backup = anchors.clone();
+        anchors_backup = anchors_backup.to(device)
+        anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0).repeat(2,1,1)
+        anchors = anchors.to(device)
+        #x,y,w,h conf ,classes
+        x = torch.sigmoid(prediction[...,0])
+        y = torch.sigmoid(prediction[...,1])
+        prediction[...,2:4] = torch.exp(prediction[...,2:4])*anchors
+        w = prediction[...,2]
+        h = prediction[...,3]
+        conf = torch.sigmoid(prediction[...,4])
+        clas = torch.sigmoid(prediction[...,5:])
+
+        #ground truch
+        obj_mask = torch.zeros((batch_size,grid_size*grid_size*anchor_size,1))
+        gbc = targets[:,2:]*grid_size
+        gxy = gbc[...,0:2]
+        gwh = gbc[...,2:4]
+        iou_mat = self.compute_iou_matrix(gwh,anchors_backup)
+        ious,best_index = iou_mat.max(1)
+        gc,gr = gxy.long().t()
+        for i in range(targets.size(0)):
+            obj_mask[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i]),0] = 1;
+        print(obj_mask)
+        return loss
+
+    def bbox_wh_iou(self,wh1, wh2):
+        wh2 = wh2.t()
+        w1, h1 = wh1[0], wh1[1]
+        w2, h2 = wh2[0], wh2[1]
+        inter_area = torch.min(w1, w2) * torch.min(h1, h2)
+        union_area = (w1 * h1 + 1e-16) + w2 * h2 - inter_area
+        return inter_area / union_area
+
+    def compute_iou_matrix(self,targets,anchors):
+        iou_matrix = []
+        for i in range(targets.size(0)):
+            ious = [self.bbox_wh_iou(targets[i,:],anchor) for anchor in anchors]
+            ious = torch.stack(ious)
+            iou_matrix.append(ious)
+        iou_mat = torch.stack(iou_matrix,0)
+        return iou_mat
     #使用sequential模块创建网络的子模块，like con_bn_leakly ....
     def create_moudles(self,blocks_):
         net_info = blocks_[0]

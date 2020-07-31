@@ -35,13 +35,6 @@ if __name__ == "__main__":
     img = cv2.imread("data/dog-cycle-car.png")
     img_raw = img.copy()
     img = prep_image(img,416)
-    #trans = transforms.Compose([transforms.ToTensor()])
-    #dataset = FudanPedDataset("./data/PennFudanPed",trans)
-
-    #trainloader = torch.utils.data.DataLoader(dataset , batch_size=2,
-                  #shuffle=True, num_workers=1,collate_fn=collate_fn)
-   
-    #img,boxex = next(iter(trainloader))
     net = Darknet("./cfg/yolov3.cfg")
     net.load_weights("./cfg/yolov3.weights")
     CUDA = 0

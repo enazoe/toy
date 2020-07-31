@@ -6,11 +6,11 @@ import numpy as np
 from PIL import Image
 import cv2
 class FudanPedDataset(Dataset):
-    def __init__(self,root="./",trans = None):
+    def __init__(self,root="./",image_size = 416):
         self.img_list = glob.glob(root+"/PNGImages/*")
         self.label_list = glob.glob(root+"/PedMasks/*")
         self.len = len(self.img_list)
-        self.trans = trans
+        self.image_size = image_size
 
     def __getitem__(self, index):
         img = Image.open(self.img_list[index]).convert("RGB")
@@ -24,21 +24,38 @@ class FudanPedDataset(Dataset):
 
         num_objs = len(obj_ids)
 
-        boxes = []
+        boxes_ = []
         for i in range(num_objs):
             pos = np.where(masks[i])
             xmin = np.min(pos[1])
             xmax = np.max(pos[1])
             ymin = np.min(pos[0])
             ymax = np.max(pos[0])
-            boxes.append([xmin/float(w), ymin/float(h), xmax/float(w), ymax/float(h)])
+            box = [xmin/float(w), ymin/float(h), xmax/float(w), ymax/float(h)]
+            boxes_.append(torch.tensor([(box[0]+box[2])/2.,(box[1]+box[3])/2.,box[2]-box[0],box[3]-box[1]]))
+        boxes_ = torch.stack(boxes_)
         #boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        img = img.resize((608,608))
-        img= self.trans(img)
+        img = img.resize((self.image_size,self.image_size))
+        img = transforms.ToTensor()(img)
+        #img= self.trans(img)
+
+        #extend boxes add batch position and class position
+        boxes = torch.zeros((len(boxes_),6))
+        boxes[:,2:] = boxes_;
+
         return (img,boxes)
 
     def __len__(self):
         return self.len
+
+    def collate_fn(self,batch):
+        imgs,targets = list(zip(*batch))
+        imgs = torch.stack([img for img in imgs])
+        for i,target in enumerate(targets):
+            target[:,0]= i;
+        targets = torch.cat(targets,0)
+        return imgs,targets
+
 
 def unique(tensor):
     tensor_np = tensor.cpu().numpy()
