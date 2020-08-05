@@ -46,6 +46,6 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         prediction = net(Variable(img),CUDA)
-    output = post_process(prediction, 0.8, 80, 0.4)
+    output = post_process(prediction, 0.8, 1, 0.4)
     disp_result(img_raw,416,output)
     save_file(output)

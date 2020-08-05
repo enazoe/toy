@@ -197,3 +197,31 @@ def post_process(prediction,confidence,num_classes,nms_conf = 0.4):
         return output
     except:
         return 0
+
+def xywh2xyxy(x):
+    y = x.new(x.shape)
+    y[..., 0] = x[..., 0] - x[..., 2] / 2
+    y[..., 1] = x[..., 1] - x[..., 3] / 2
+    y[..., 2] = x[..., 0] + x[..., 2] / 2
+    y[..., 3] = x[..., 1] + x[..., 3] / 2
+    return y
+
+def check_dataset(imgs,targets):
+    for i,img in enumerate(imgs):
+        img_array = np.array(img.permute(1,2,0).contiguous())
+        for box in targets:
+            if box[0] != i:
+                continue
+            box = xywh2xyxy(box[2:6])*416
+            box = box.to("cpu")
+            cv2.rectangle(img_array,(int(box[0]),int(box[1])),(int(box[2]),int(box[3])),(0,255,0),2)
+        cv2.imshow("img",img_array)
+        cv2.waitKey()
+
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find("BatchNorm2d") != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0.0)

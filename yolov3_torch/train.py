@@ -19,16 +19,20 @@ if __name__ == "__main__":
                   shuffle=True, num_workers=4,collate_fn= dataset.collate_fn)
     
     net = Darknet("./cfg/yolov3_1class.cfg").to(device)
-    
+    net.apply(weights_init_normal)
+    net.load_weights("./cfg/darknet53.conv.74")
     optimizer = torch.optim.Adam(net.parameters())
     for epoch in range(100000):
         net.train()
         for batch_i ,(imgs,targets) in enumerate(trainloader):
+           # check_dataset(imgs,targets)
             optimizer.zero_grad()
-            imgs = imgs.to(device)
-            targets = targets.to(device)
+            imgs = Variable(imgs.to(device))
+            targets = Variable(targets.to(device),requires_grad = False)
             detection,loss = net(imgs,targets,device)
             loss.backward()
             optimizer.step()
-            if batch_i % 20 == 0:
-                print("loss:",epoch*len(trainloader)+batch_i,",",loss.item())
+            if batch_i % 10 == 0:
+                print("epoch:",epoch," index:",batch_i,",",loss.item())
+        if epoch % 10 == 0:
+            torch.save(net.state_dict(),f"cfg/yolov3_ckpt_%d.pth" % epoch)

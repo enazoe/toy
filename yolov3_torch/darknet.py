@@ -19,8 +19,8 @@ class Darknet(nn.Module):
         self.net_info,self.module_list = self.create_moudles(self.blocks)
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
-        self.obj_scale = 5.
-        self.noobj_scale = 0.5
+        self.obj_scale = 1.
+        self.noobj_scale = 100
     def forward(self,x,target = None,device="cuda"):
         modules = self.blocks[1:]
         output_cahce = {}
@@ -67,7 +67,7 @@ class Darknet(nn.Module):
         
         loss = 0
         if targets is not None:
-            loss = self.comput_loss(prediction,targets,anchors,device)
+            loss = self.comput_loss(prediction,targets,anchors,input_dim,device)
             return prediction,loss
         grid_size = prediction.size(2)
         batch_size = prediction.size(0)
@@ -110,29 +110,30 @@ class Darknet(nn.Module):
 
         return prediction,loss
 
-    def comput_loss(self,prediction,targets,anchors,device,ignore_thresh=0.7):
+    def comput_loss(self,prediction,targets,anchors,input_dim,device,ignore_thresh=0.7):
         loss = 0
         batch_size = prediction.size(0)
         channels = prediction.size(1)
         classes = int(prediction.size(1)/3-5)
         grid_size = prediction.size(2)
         anchor_size = len(anchors)
+        stride = input_dim/grid_size
         #format x
         prediction = (prediction.view(batch_size,channels,grid_size*grid_size)
             .permute(0,2,1)
             .contiguous()
             .view(batch_size,grid_size*grid_size*anchor_size,5+classes))
         #format anchor
-        anchors = [[anchor[0]/grid_size,anchor[1]/grid_size]for anchor in anchors]
+        anchors = [[anchor[0]/stride,anchor[1]/stride]for anchor in anchors]
         anchors = torch.FloatTensor(anchors)
-        anchors_backup = anchors.clone();
-        anchors_backup = anchors_backup.to(device)
-        anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0).repeat(batch_size,1,1)
+        #anchors_backup = anchors.clone();
+        #anchors_backup = anchors_backup.to(device)
+        #anchors = anchors.repeat(grid_size*grid_size,1).unsqueeze(0).repeat(batch_size,1,1)
         anchors = anchors.to(device)
         #x,y,w,h conf ,classes
         x = torch.sigmoid(prediction[...,0])
         y = torch.sigmoid(prediction[...,1])
-        prediction[...,2:4] = torch.exp(prediction[...,2:4])*anchors
+        #prediction[...,2:4] = torch.exp(prediction[...,2:4])#*anchors
         w = prediction[...,2]
         h = prediction[...,3]
         conf = torch.sigmoid(prediction[...,4])
@@ -150,20 +151,20 @@ class Darknet(nn.Module):
         gbc = targets[:,2:]*grid_size
         gxy = gbc[...,0:2]
         gwh = gbc[...,2:4]
-        iou_mat = self.compute_iou_matrix(gwh,anchors_backup)
+        iou_mat = self.compute_iou_matrix(gwh,anchors)
         ious,best_index = iou_mat.max(1)
         gc,gr = gxy.long().t()
         for i in range(targets.size(0)):
-            tcls[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i]),int(targets[i,1])] = 1;
-            obj_mask[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = 1;
-            noobj_mask[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = 0;
+            tcls[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i]),int(targets[i,1])] = 1;
+            obj_mask[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = 1;
+            noobj_mask[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = 0;
             for a in range(iou_mat.size(1)):
                 if iou_mat[i,a] > ignore_thresh:
-                    noobj_mask[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(a)] = 0;
-            tx[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = gxy[i,0] - gc[i]
-            ty[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = gxy[i,1] - gr[i]
-            tw[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = gwh[i,0]
-            th[int(targets[i,0]),int(gc[i])+int(grid_size)*int(gr[i])+int(best_index[i])] = gwh[i,1]
+                    noobj_mask[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(a)] = 0;
+            tx[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = gxy[i,0] - gc[i]
+            ty[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = gxy[i,1] - gr[i]
+            tw[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = torch.log(gwh[i,0]/anchors[int(best_index[i])][0]+1e-16)
+            th[int(targets[i,0]),(int(gc[i])+int(grid_size)*int(gr[i]))*anchor_size+int(best_index[i])] = torch.log(gwh[i,1]/anchors[int(best_index[i])][1]+1e-16)
         loss_x= self.mse_loss(x[obj_mask],tx[obj_mask])
         loss_y= self.mse_loss(y[obj_mask],ty[obj_mask])
         loss_w= self.mse_loss(w[obj_mask],tw[obj_mask])
@@ -173,6 +174,7 @@ class Darknet(nn.Module):
         loss_conf_obj =self.obj_scale * self.bce_loss(conf[obj_mask] , tconf[obj_mask])
         loss_conf_noobj = self.noobj_scale * self.bce_loss(conf[noobj_mask] , tconf[noobj_mask])
         loss_clas = self.bce_loss(clas[obj_mask] , tcls[obj_mask])
+        #print("loss: x:{}, y:{}, w:{}, h:{},c_obj:{}, c_onobj:{}, clas:{}".format(loss_x , loss_y , loss_w , loss_h , loss_conf_obj , loss_conf_noobj , loss_clas))
         return loss_x + loss_y + loss_w + loss_h + loss_conf_obj + loss_conf_noobj + loss_clas
 
     def bbox_wh_iou(self,wh1, wh2):
@@ -313,8 +315,14 @@ class Darknet(nn.Module):
         self.seen = self.header[3]   
         
         weights = np.fromfile(fp, dtype = np.float32)
+
+        cutoff = None
+        if "darknet53.conv.74" in weightfile:
+            cutoff = 75
         ptr = 0
         for i in range(len(self.module_list)):
+            if i == cutoff:
+                break
             module_type = self.blocks[i + 1]["type"]
     
             #If module_type is convolutional load weights
