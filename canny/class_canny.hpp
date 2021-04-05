@@ -24,14 +24,18 @@ namespace EZ
             _img = img_.clone();
             gaussion_blur(res_);
             cv::imshow("blur",res_);
+            cv::imwrite("../res/blur.jpg",res_);
             cv::Mat gradient,direction;
             calculate_gradient(res_,gradient,direction);
             cv::Mat gradient_num = nms(gradient,direction);
             cv::imshow("nms",gradient_num);
+            cv::imwrite("../res/nms.jpg",gradient_num);
             cv::Mat mat_thresh = double_thresh(gradient_num,0.05,0.09);
             cv::imshow("thresh",mat_thresh);
+            cv::imwrite("../res/thresh.jpg",mat_thresh);
             cv::Mat mat_canny = track_hysteresis(mat_thresh);
             cv::imshow("canny",mat_canny);
+            cv::imwrite("../res/canny.jpg",mat_canny);
             cv::waitKey();
         }
 
@@ -131,6 +135,8 @@ namespace EZ
            // std::cout<<gradientX<<std::endl;
            // std::cout<<gradientX<<std::endl;
             cv::Mat gradientY = filter_float(res_,sobely);
+            cv::imwrite("../res/gradientX.jpg",gradientX);
+            cv::imwrite("../res/gradientY.jpg",gradientY);
             res_ = gradientX.mul(gradientX)+gradientY.mul(gradientY);
             double min=0,max=0;
             for (int r  = 0; r < res_.rows; r++)
@@ -166,6 +172,7 @@ namespace EZ
          //   std::cout<<direction_<<std::endl;
           //  cv::imshow("Gx",gradientX);
           //  cv::imshow("Gy",gradientY);
+            cv::imwrite("../res/intensity.jpg",intensity_);
             cv::imshow("G",intensity_);
 
         }

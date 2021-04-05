@@ -8,6 +8,7 @@ int main()
     EZ::Canny canny;
     canny.set_params();
     cv::Mat img = cv::imread("../lena.png",cv::IMREAD_GRAYSCALE);
+    cv::imwrite("../res/lena_gray.jpg",img);
     cv::namedWindow("lena",cv::WINDOW_NORMAL);
     cv::imshow("lena",img);
     cv::Mat res_canny;
