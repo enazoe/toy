@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.1) 
+project(canny)            
+
+set(CMAKE_CXX_COMPILIER "/usr/bin/g++")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -Wno-write-strings")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath -Wl,$ORIGIN")
+
+find_package(OpenCV REQUIRED)
+if(Opencv_FOUND)
+	message("found opencv")
+endif()
+
+file(GLOB_RECURSE sources  *.hpp *.cpp)
+
+
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+add_executable(canny main.cpp)
+target_link_libraries(canny ${OpenCV_LIBS} )
