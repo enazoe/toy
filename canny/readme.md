@@ -158,7 +158,7 @@ cv::Mat nms(const cv::Mat& gradient_,const cv::Mat &direction_)
 
 双阈值的目的是对图像的梯度值进行区分，将梯度值分为强梯度值、弱梯度值和不相关值。比如，梯度值大于高阈值的点被标记为强边缘，小于高阈值大于低阈值点被标记为弱阈值，小于低阈值点被标记为不相关点。
 
-![hres](/Users/hzr/study/toy/canny/res/thresh.jpg)
+![hres](./res/thresh.jpg)
 
 ```c++
 cv::Mat double_thresh(cv::Mat &gradient_,float low_ratio_,float high_ratio_)
@@ -192,7 +192,7 @@ cv::Mat double_thresh(cv::Mat &gradient_,float low_ratio_,float high_ratio_)
 
 在进行完nms之后图像边缘可能会出现断裂的情况，我们利用迟滞现象，对图像进行补全，原理是，如果当前位置是强梯度值，那么被标记为边缘，如果当前位置为弱梯度值没那么搜索它的邻域是否有强梯度，如果有则当前位置也被标记为边缘。
 
-![ann](/Users/hzr/study/toy/canny/res/canny.jpg)
+![ann](./res/canny.jpg)
 
 代码：
 
