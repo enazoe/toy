@@ -2,7 +2,9 @@
 *.vscode/
 .DS_Store
 .DS_Store/
+*.ppm
 build/
+Release/
 *.pth
 data/
 *.pyc
