@@ -20,10 +20,9 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{CA4ABDC1-8028-4BCA-ACAA-8461C2789CC9}</ProjectGuid>
-    <RootNamespace>asst1vs</RootNamespace>
+    <ProjectGuid>{BE65A9AF-B3ED-44E2-88FB-882C4F923823}</ProjectGuid>
+    <RootNamespace>prog2vecintrin</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
-    <ProjectName>prog1_mandelbrot_threads</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -71,25 +70,25 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-    </Link>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\study\toy\cs149\asst1\common</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\study\toy\cs149\asst1\prog2_vecintrin;D:\study\toy\cs149\asst1\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -118,8 +117,6 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\study\asst1\common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,15 +125,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\common\ppm.cpp" />
-    <ClCompile Include="..\..\common\tasksys.cpp" />
-    <ClCompile Include="..\..\prog1_mandelbrot_threads\main.cpp" />
-    <ClCompile Include="..\..\prog1_mandelbrot_threads\mandelbrotSerial.cpp" />
-    <ClCompile Include="..\..\prog1_mandelbrot_threads\mandelbrotThread.cpp" />
+    <ClCompile Include="..\..\prog2_vecintrin\CS149intrin.cpp" />
+    <ClCompile Include="..\..\prog2_vecintrin\logger.cpp" />
+    <ClCompile Include="..\..\prog2_vecintrin\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\common\CycleTimer.h" />
-    <ClInclude Include="..\..\common\getopt.h" />
+    <ClInclude Include="..\..\prog2_vecintrin\CS149intrin.h" />
+    <ClInclude Include="..\..\prog2_vecintrin\logger.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

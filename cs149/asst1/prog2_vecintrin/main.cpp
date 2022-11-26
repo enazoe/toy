@@ -21,85 +21,88 @@ float arraySumVector(float* values, int N);
 bool verifyResult(float* values, int* exponents, float* output, float* gold, int N);
 
 int main(int argc, char * argv[]) {
-  int N = 16;
-  bool printLog = false;
+	int N = 16;
+	bool printLog = false;
 
-  // parse commandline options ////////////////////////////////////////////
-  int opt;
-  static struct option long_options[] = {
-    {"size", 1, 0, 's'},
-    {"log", 0, 0, 'l'},
-    {"help", 0, 0, '?'},
-    {0 ,0, 0, 0}
-  };
+	// parse commandline options ////////////////////////////////////////////
+	int opt;
+	static struct option long_options[] = {
+	  {"size", 1, 0, 's'},
+	  {"log", 0, 0, 'l'},
+	  {"help", 0, 0, '?'},
+	  {0 ,0, 0, 0}
+	};
 
-  while ((opt = getopt_long(argc, argv, "s:l?", long_options, NULL)) != EOF) {
+	while ((opt = getopt_long(argc, argv, "s:l?", long_options, NULL)) != EOF) {
 
-    switch (opt) {
-      case 's':
-        N = atoi(optarg);
-        if (N <= 0) {
-          printf("Error: Workload size is set to %d (<0).\n", N);
-          return -1;
-        }
-        break;
-      case 'l':
-        printLog = true;
-        break;
-      case '?':
-      default:
-        usage(argv[0]);
-        return 1;
-    }
-  }
+		switch (opt) {
+		case 's':
+			N = atoi(optarg);
+			if (N <= 0) {
+				printf("Error: Workload size is set to %d (<0).\n", N);
+				return -1;
+			}
+			break;
+		case 'l':
+			printLog = true;
+			break;
+		case '?':
+		default:
+			usage(argv[0]);
+			return 1;
+		}
+	}
 
 
-  float* values = new float[N+VECTOR_WIDTH];
-  int* exponents = new int[N+VECTOR_WIDTH];
-  float* output = new float[N+VECTOR_WIDTH];
-  float* gold = new float[N+VECTOR_WIDTH];
-  initValue(values, exponents, output, gold, N);
+	float* values = new float[N + VECTOR_WIDTH];
+	int* exponents = new int[N + VECTOR_WIDTH];
+	float* output = new float[N + VECTOR_WIDTH];
+	float* gold = new float[N + VECTOR_WIDTH];
+	initValue(values, exponents, output, gold, N);
 
-  clampedExpSerial(values, exponents, gold, N);
-  clampedExpVector(values, exponents, output, N);
+	clampedExpSerial(values, exponents, gold, N);
+	clampedExpVector(values, exponents, output, N);
 
-  //absSerial(values, gold, N);
-  //absVector(values, output, N);
+	/*	absSerial(values, gold, N);
+		absVector(values, output, N)*/;
 
-  printf("\e[1;31mCLAMPED EXPONENT\e[0m (required) \n");
-  bool clampedCorrect = verifyResult(values, exponents, output, gold, N);
-  if (printLog) CS149Logger.printLog();
-  CS149Logger.printStats();
+	printf("\e[1;31mCLAMPED EXPONENT\e[0m (required) \n");
+	bool clampedCorrect = verifyResult(values, exponents, output, gold, N);
+	if (printLog) CS149Logger.printLog();
+	CS149Logger.printStats();
 
-  printf("************************ Result Verification *************************\n");
-  if (!clampedCorrect) {
-    printf("@@@ Failed!!!\n");
-  } else {
-    printf("Passed!!!\n");
-  }
+	printf("************************ Result Verification *************************\n");
+	if (!clampedCorrect) {
+		printf("@@@ Failed!!!\n");
+	}
+	else {
+		printf("Passed!!!\n");
+	}
 
-  printf("\n\e[1;31mARRAY SUM\e[0m (bonus) \n");
-  if (N % VECTOR_WIDTH == 0) {
-    float sumGold = arraySumSerial(values, N);
-    float sumOutput = arraySumVector(values, N);
-    float epsilon = 0.1;
-    bool sumCorrect = abs(sumGold - sumOutput) < epsilon * 2;
-    if (!sumCorrect) {
-      printf("Expected %f, got %f\n.", sumGold, sumOutput);
-      printf("@@@ Failed!!!\n");
-    } else {
-      printf("Passed!!!\n");
-    }
-  } else {
-    printf("Must have N %% VECTOR_WIDTH == 0 for this problem (VECTOR_WIDTH is %d)\n", VECTOR_WIDTH);
-  }
+	printf("\n\e[1;31mARRAY SUM\e[0m (bonus) \n");
+	if (N % VECTOR_WIDTH == 0) {
+		float sumGold = arraySumSerial(values, N);
+		float sumOutput = arraySumVector(values, N);
+		float epsilon = 0.1;
+		bool sumCorrect = abs(sumGold - sumOutput) < epsilon * 2;
+		if (!sumCorrect) {
+			printf("Expected %f, got %f\n.", sumGold, sumOutput);
+			printf("@@@ Failed!!!\n");
+		}
+		else {
+			printf("Passed!!!\n");
+		}
+	}
+	else {
+		printf("Must have N %% VECTOR_WIDTH == 0 for this problem (VECTOR_WIDTH is %d)\n", VECTOR_WIDTH);
+	}
 
-  delete [] values;
-  delete [] exponents;
-  delete [] output;
-  delete [] gold;
+	delete[] values;
+	delete[] exponents;
+	delete[] output;
+	delete[] gold;
 
-  return 0;
+	return 0;
 }
 
 void usage(const char* progname) {
@@ -249,7 +252,54 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
-  
+	__cs149_vec_int e;
+	__cs149_vec_float result;
+	__cs149_vec_int zero_int = _cs149_vset_int(0.f);
+	__cs149_vec_float x;
+	__cs149_mask mask;
+	__cs149_mask all_mask = _cs149_init_ones();
+	__cs149_vec_int exp;
+	__cs149_vec_int const_zero = _cs149_vset_int(0);
+	__cs149_vec_int const_one = _cs149_vset_int(1);
+	__cs149_vec_float const_99 = _cs149_vset_float(9.999999f);
+	__cs149_vec_float res;
+
+	for (int i = 0; i < (N - N % VECTOR_WIDTH); i += VECTOR_WIDTH) {
+		mask = _cs149_init_ones(); // 这个如果都是0 那么代表结束游戏
+		_cs149_vload_float(x, values + i, mask);
+		_cs149_vset_float(res, 1.0f, mask);
+		_cs149_vload_int(exp, exponents + i, mask);
+		_cs149_vgt_int(mask, exp, const_zero, mask);
+		_cs149_vlt_float(mask, x, const_99, mask);
+		while (_cs149_cntbits(mask) != 0) {
+			_cs149_vmult_float(res, res, x, mask);
+			_cs149_vsub_int(exp, exp, const_one, mask);
+			_cs149_vgt_int(mask, exp, const_zero, mask);
+			_cs149_vlt_float(mask, x, const_99, mask);
+		}
+		_cs149_vgt_float(mask, res, const_99, all_mask);
+		_cs149_vmove_float(res, const_99, mask);
+		_cs149_vstore_float(output + i, res, all_mask);
+	}
+	for (int i = (N - N % VECTOR_WIDTH); i < N; i++) { // 如果出现除不尽的情况有两种做法，padding和单独计算，这里简单点直接算
+		float x = values[i];
+		int y = exponents[i];
+		if (y == 0) {
+			output[i] = 1.f;
+		}
+		else {
+			float result = x;
+			int count = y - 1;
+			while (count > 0) {
+				result *= x;
+				count--;
+			}
+			if (result > 9.999999f) {
+				result = 9.999999f;
+			}
+			output[i] = result;
+		}
+	}
 }
 
 // returns the sum of all elements in values
@@ -265,16 +315,30 @@ float arraySumSerial(float* values, int N) {
 // returns the sum of all elements in values
 // You can assume N is a multiple of VECTOR_WIDTH
 // You can assume VECTOR_WIDTH is a power of 2
-float arraySumVector(float* values, int N) {
-  
-  //
-  // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
-  //
-  
-  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+float arraySumVector(float* values, int N)
+{
 
-  }
-
-  return 0.0;
+	//
+	// CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
+	//
+	__cs149_vec_float x;
+	__cs149_mask all_mask = _cs149_init_ones();
+	float *output = new float[VECTOR_WIDTH];
+	float v = 0;
+	for (int i = 0; i < N; i += VECTOR_WIDTH)
+	{
+		_cs149_vload_float(x, values + i, all_mask);
+		for (int j=0;j<VECTOR_WIDTH/2-1;++j)
+		{
+			_cs149_hadd_float(x, x);
+			_cs149_interleave_float(x, x);
+		}
+		_cs149_hadd_float(x, x);
+		_cs149_vstore_float(output, x, all_mask);
+		v += output[0];
+	}
+	
+	delete[] output;
+	return v;
 }
 
